@@ -133,6 +133,7 @@ let running = false;
  */
 async function ensure(onProgress, rootOverride) {
   const root = rootOverride;
+  if (!root) throw new Error('ensure(): root directory is required');
   if (running) return status(root);
   running = true;
   const emit = (s) => onProgress && onProgress(s);

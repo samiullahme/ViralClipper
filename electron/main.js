@@ -92,14 +92,16 @@ app.whenReady().then(() => {
 
   // First-run convenience: quietly verify ffmpeg/python; auto-download missing
   // pieces (streams progress events to the renderer).
+  // NOTE: root must be passed explicitly — ensure() resolves portable paths
+  // relative to the exe location, not CWD.
   binaries.ensure((s) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('binaries:progress', s);
       if (s.done || s.error) {
-        mainWindow.webContents.send('binaries:status', binaries.status());
+        mainWindow.webContents.send('binaries:status', binaries.status(P.root));
       }
     }
-  }).catch(() => {});
+  }, P.root).catch(() => {});
 });
 
 app.on('window-all-closed', () => app.quit());
