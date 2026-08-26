@@ -1,0 +1,41 @@
+/* src/index.css — global styles: Tailwind layers + dark theme component classes. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink text-zinc-300 font-sans antialiased overflow-hidden select-none;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #52525b; }
+
+@layer components {
+  /* Card container */
+  .card { @apply bg-panel border border-edge rounded-xl; }
+
+  /* Buttons */
+  .btn { @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+         transition-colors disabled:opacity-40 disabled:pointer-events-none focus:outline-none
+         focus:ring-2 focus:ring-accent/50; }
+  .btn-primary { @apply btn bg-accent hover:bg-accent-hover text-white; }
+  .btn-ghost { @apply btn bg-neutral-800/70 hover:bg-neutral-700/70 text-zinc-200; }
+  .btn-danger { @apply btn bg-red-600/90 hover:bg-red-600 text-white; }
+
+  /* Inputs */
+  .input { @apply w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-sm
+           text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-accent; }
+  .label { @apply block text-xs uppercase tracking-wider text-zinc-500 mb-1.5 font-semibold; }
+
+  /* Small chip / badge */
+  .chip { @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs bg-neutral-800 text-zinc-400; }
+
+  /* Skeleton loading block */
+  .skeleton { @apply animate-pulse bg-neutral-800 rounded-lg; }
+}

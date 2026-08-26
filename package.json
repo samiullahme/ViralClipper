@@ -1,0 +1,80 @@
+{
+  "name": "viralclipper",
+  "productName": "ViralClipper",
+  "version": "1.0.0",
+  "description": "Turn long videos into viral short clips (YouTube Shorts / TikTok / Reels)",
+  "main": "electron/main.js",
+  "license": "MIT",
+  "author": "ViralClipper",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "assets": "node scripts/make-assets.mjs",
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:127.0.0.1:5173 && cross-env VITE_DEV=1 electron .\"",
+    "build:renderer": "vite build",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "dist": "npm run build:renderer && electron-builder --win --dir",
+    "dist:portable": "npm run build:renderer && electron-builder --win --dir && node scripts/zip-portable.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^31.3.4",
+    "electron-builder": "^25.0.5",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.7",
+    "vite": "^5.4.2",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.viralclipper.app",
+    "productName": "ViralClipper",
+    "executableName": "app",
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**"
+    ],
+    "win": {
+      "icon": "resources/app.ico",
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": ".",
+        "filter": ["**/*"]
+      }
+    ],
+    "extraFiles": [
+      {
+        "from": "python",
+        "to": "python",
+        "filter": ["**/*"]
+      }
+    ]
+  }
+}
