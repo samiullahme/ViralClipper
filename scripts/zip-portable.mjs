@@ -20,6 +20,13 @@ for (const name of ['app.exe', 'ffmpeg.exe', 'python/transcribe.py',
   const p = path.join(unpacked, name.replace('/', path.sep));
   console.log(`${fs.existsSync(p) ? '[ok]' : '[--]'} ${name}`);
 }
+if (!fs.existsSync(path.join(unpacked, 'app.exe'))) {
+  console.error('app.exe is missing from win-unpacked — the electron-builder step failed.');
+  process.exit(1);
+}
+
+// Remove dev-machine cruft so it never ships inside the portable zip.
+fs.rmSync(path.join(unpacked, 'python', '__pycache__'), { recursive: true, force: true });
 
 let res;
 if (process.platform === 'win32') {
@@ -29,4 +36,23 @@ if (process.platform === 'win32') {
 } else {
   res = spawnSync('zip', ['-qr', outZip, '.'], { cwd: unpacked, stdio: 'inherit' });
 }
-process.exit(res.status ?? 0);
+
+// Fail LOUDLY if the packer itself couldn't run (e.g. `zip` not installed).
+// Previously `res.status ?? 0` treated a missing binary as success.
+if (res.error) {
+  console.error(`\nPackaging tool failed to launch: ${res.error.message}`);
+  if (process.platform !== 'win32') {
+    console.error("Install the zip CLI and retry:  sudo apt-get install -y zip");
+  }
+  process.exit(1);
+}
+if (res.status !== 0) process.exit(res.status ?? 1);
+
+// Verify the archive really exists before claiming victory.
+if (!fs.existsSync(outZip)) {
+  console.error('\nZip step finished but ViralClipper-portable.zip was not created.');
+  process.exit(1);
+}
+const mb = (fs.statSync(outZip).size / 1024 / 1024).toFixed(1);
+console.log(`\nCreated release/ViralClipper-portable.zip (${mb} MB)`);
+process.exit(0);
