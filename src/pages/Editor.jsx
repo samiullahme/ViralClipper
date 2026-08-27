@@ -128,7 +128,7 @@ export default function Editor() {
       {/* ---- Global editing toolbar ---- */}
       <div className="card p-4 flex flex-wrap items-center gap-x-6 gap-y-3 mb-6">
         <span className="label !mb-0">Applied to all {enabledClips.length} enabled clips:</span>
-        <Toggle k="jumpcut" label="Jump-cut shift (every 4.5s)" />
+        <Toggle k="jumpcut" label="Smooth pan + re-center (every 4.5s)" />
         <Toggle k="overlayFrame" label="Phone-frame overlay" />
         <Toggle k="logoOn" label="Channel logo"
           disabled={!settings.logoPath}

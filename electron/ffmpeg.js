@@ -1,8 +1,11 @@
 // electron/ffmpeg.js — builds ffmpeg argument lists for every render mode.
 //
 // Editing trick implemented here:
-//   - Jump cuts every ~4.5s with LEFT / RIGHT / CENTER crop shifting (looped),
-//     done as a single time-based crop expression (cheap, no segment concat).
+//   - Smooth sinusoidal pan: the crop window moves continuously across the
+//     video (±10–44 px at 1080p), so the output always FEELS like real
+//     motion — never static, never a freeze-frame.
+//   - Every ~4.5 s the base position resets (LEFT → RIGHT → CENTER loop)
+//     via a step offset layered on top of the smooth oscillation.
 //   - Speed 1.2x via setpts=0.833*PTS + atempo.
 //   - frame_overlay.png scaled over the video, channel logo bottom-right @85%.
 //   - drawtext overlays (headline / subtext / hashtags) using textfile= so we
@@ -52,16 +55,50 @@ function findBoldFont() {
 }
 
 /**
- * Time-based jump-cut crop expression.
- * Segment length segLen; pattern loops LEFT, RIGHT, CENTER.
- * Crop width keeps shiftPct total room; x slides within it.
+ * Cropped width as a fraction of the full input width. This is the "panning
+ * room" — how far the crop window can slide across the video. Larger room =
+ * more noticeable movement without losing content to black edges.
+ * Preview renders use more room (up to 12%) so the motion reads clearly at small size.
+ */
+function cropWidthPct(quality) {
+  return quality === 'preview' ? 0.88 : 0.96; // keep 4% visible crop edge on 1080p export
+}
+
+/**
+ * Build the time-based crop x expression — SMOOTH + periodic stepping.
+ *
+ * The crop window slides horizontally within the pan room `(iw-ow)`; every
+ * value is a fraction of that room so it scales with any source resolution.
+ *
+ *   base   = step offset resetting every `segLen`s: LEFT → RIGHT → CENTER loop
+ *   sway   = continuous sine panning (never static — the video is always moving)
+ *   bounce = spring oscillation right after each step flip, so the direction
+ *            change feels organic instead of mechanically abrupt
+ *
+ * x = clamp(base + sway + bounce, 0, iw-ow)
+ *
  * NOTE: inside crop x/y expressions use iw/ow (not w).
  */
-function jumpCutXExpr(segLen) {
+function panXExpr(segLen, quality) {
+  const room = cropWidthPct(quality);            // 0.96 export / 0.88 preview
+  const R = `(iw-ow)`;                           // full pan room (positive)
+  const seg = segLen || 4.5;
+
   // n = floor(t/seg); r = n - 3*floor(n/3)  (mod-3 without mod(), max compat)
-  const n = `floor(t/${segLen})`;
-  const r = `(${n}-3*floor(${n}/3))`;
-  return `'if(lt(${r},1),(iw-ow),if(lt(${r},2),0,(iw-ow)/2))'`;
+  const nf = `floor(t/${seg})`;
+  const r = `(${nf}-3*floor(${nf}/3))`;
+  const ph = `(t-${seg}*${nf})/${seg}`;          // 0..1 within the current segment
+
+  // Left / right / center as fractions of the pan room.
+  const base = `if(lt(${r},1),0,if(lt(${r},2),1,0.5))*${R}`;
+
+  // Continuous sinusoidal pan — ~1.5 oscillations per segment (clearly moving).
+  const sway = `0.30*${R}*sin(3*PI*t/${seg})`;
+
+  // Spring-in/out right after each step boundary for a natural "reposition".
+  const bounce = `0.12*${R}*sin(${seg}*PI*${ph})*exp(-3.5*${ph})`;
+
+  return `'clip(${base}+${sway}+${bounce},0,${R})'`;
 }
 
 /**
@@ -81,11 +118,13 @@ function buildArgs(opts) {
 
   const filters = [];
 
-  // 1) Jump-cut crop (uses ORIGINAL timeline t, so apply before setpts).
+  // 1) Panning crop (uses ORIGINAL timeline t, so apply before setpts).
+  // Continuous sinusoidal movement + periodic LEFT/RIGHT/CENTER re-centering.
   const baseFilters = [];
   if (opts.jumpcut) {
     baseFilters.push(
-      `crop=w='trunc(iw*${(1 - 0.05).toFixed(2)})':h=ih:x=${jumpCutXExpr(opts.segLen || 4.5)}:y=0`
+      `crop=w='trunc(iw*${(cropWidthPct(opts.quality)).toFixed(2)})':h=ih:` +
+      `x=${panXExpr(opts.segLen || 4.5, opts.quality)}:y=0`
     );
   }
 
