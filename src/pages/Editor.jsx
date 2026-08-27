@@ -12,6 +12,7 @@ const DEFAULT_OPTIONS = {
   segLen: 4.5,
   overlayFrame: true,
   logoOn: true,
+  positionShift: true,
 };
 
 export default function Editor() {
@@ -49,6 +50,14 @@ export default function Editor() {
       setOptions((o) => ({ ...o, logoOn: false })); // no logo uploaded yet
     }
   }, [settings.logoPath]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persistent position-shift preference (applies on export too).
+  useEffect(() => {
+    if (settings.position_shift != null) {
+      const v = String(settings.position_shift) === 'false' ? false : true;
+      setOptions((o) => ({ ...o, positionShift: v }));
+    }
+  }, [settings.position_shift]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const persistSelected = async (patch) => {
     const updated = await window.vc.updateClip(selected.id, patch);
@@ -115,7 +124,11 @@ export default function Editor() {
         className="accent-accent w-4 h-4"
         checked={options[k]}
         disabled={disabled}
-        onChange={(e) => setOptions((o) => ({ ...o, [k]: e.target.checked }))}
+        onChange={(e) => {
+          const val = e.target.checked;
+          setOptions((o) => ({ ...o, [k]: val }));
+          if (k === 'positionShift') window.vc.setSettings({ position_shift: val });
+        }}
       />
       {label}
     </label>
@@ -129,6 +142,7 @@ export default function Editor() {
       <div className="card p-4 flex flex-wrap items-center gap-x-6 gap-y-3 mb-6">
         <span className="label !mb-0">Applied to all {enabledClips.length} enabled clips:</span>
         <Toggle k="jumpcut" label="Smooth pan + re-center (every 4.5s)" />
+        <Toggle k="positionShift" label="Position-shift drift (bypass)" />
         <Toggle k="overlayFrame" label="Phone-frame overlay" />
         <Toggle k="logoOn" label="Channel logo"
           disabled={!settings.logoPath}

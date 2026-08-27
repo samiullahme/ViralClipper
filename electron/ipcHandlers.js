@@ -14,6 +14,7 @@ const db = require('./db');
 const ai = require('./ai');
 const { buildArgs } = require('./ffmpeg');
 const binaries = require('./binaries');
+const positionshift = require('./positionshift');
 
 let P;                 // resolved paths (injected from main.js)
 let getWindow = () => null;
@@ -98,6 +99,28 @@ function waitFfmpeg(child) {
       code === 0 ? resolve() : reject(new Error(`FFmpeg exited ${code}. ${child._errTail()}`)));
     child.on('error', reject);
   });
+}
+
+/**
+ * Apply the "Position Shift" drifting effect to an already-trimmed clip.
+ * Rewrites `filePath` in place (via a temp file + atomic rename so a cancelled
+ * run never leaves a half-finished clip at the target path).
+ */
+async function applyPositionShift(input, duration, onPercent) {
+  const ff = binaries.locateFfmpeg(P.root);
+  const info = await positionshift.probe(input, ff);
+  const tmp = path.join(os.tmpdir(), `vc_shift_${Date.now()}_${Math.random().toString(36).slice(2)}.mp4`);
+  const { args } = positionshift.buildShiftArgs({
+    input, output: tmp, W: info.w, H: info.h, duration, seed: Date.now(),
+  });
+  const child = spawnFfmpeg(args, info.duration, onPercent);
+  try {
+    await waitFfmpeg(child);
+    fs.renameSync(tmp, input); // atomic replace
+    return input;
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
 }
 
 /** Extract a jpeg thumbnail at t seconds; returns cached file path. */
@@ -433,6 +456,17 @@ function registerIpcHandlers(paths, windowGetter) {
         send('export:progress', { index: i, total: clips.length, title: clip.title, percent: pct }));
       try {
         await waitFfmpeg(child);
+        if (options.positionShift) {
+          send('export:progress', { index: i, total: clips.length, title: clip.title, percent: 99, stage: 'shifting' });
+          try {
+            await applyPositionShift(out, dur, (pct) =>
+              send('export:progress', { index: i, total: clips.length, title: clip.title, percent: 99, stage: 'shifting' }));
+          } catch (shiftErr) {
+            send('export:error', { index: i, message: `Position-shift failed: ${String(shiftErr.message || shiftErr)}` });
+            exportState = null;
+            throw shiftErr;
+          }
+        }
         outputs.push(out);
         send('export:item-done', { index: i, path: out });
       } catch (err) {
@@ -452,6 +486,26 @@ function registerIpcHandlers(paths, windowGetter) {
   ipcMain.handle('export:cancel', () => {
     if (exportState) exportState.cancelRequested = true;
     return true;
+  });
+
+  // ---- position-shift (single standalone pass on an existing clip) ---------------
+  ipcMain.handle('shift:apply', async (_e, { filePath }) => {
+    if (!filePath || !fs.existsSync(filePath)) throw new Error('Pick a valid video file first.');
+    const ff = binaries.locateFfmpeg(P.root);
+    const info = await positionshift.probe(filePath, ff);
+    const out = path.join(P.previewsDir, `shift_${Date.now()}.mp4`);
+    const { args } = positionshift.buildShiftArgs({
+      input: filePath, output: out, W: info.w, H: info.h, duration: info.duration, seed: Date.now(),
+    });
+    const child = spawnFfmpeg(args, info.duration, (pct) => send('shift:progress', { percent: pct }));
+    try {
+      await waitFfmpeg(child);
+      send('shift:done', { path: out });
+      return { path: out };
+    } catch (err) {
+      send('shift:error', String(err.message || err));
+      throw err;
+    }
   });
 
   // ---- binaries & misc ----------------------------------------------------------------------

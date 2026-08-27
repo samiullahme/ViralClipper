@@ -16,6 +16,9 @@ const EVENT_CHANNELS = new Set([
   'preview:error',
   'binaries:progress',
   'binaries:status',
+  'shift:progress',
+  'shift:done',
+  'shift:error',
 ]);
 
 const invoke = (ch, payload) => ipcRenderer.invoke(ch, payload);
@@ -57,6 +60,7 @@ contextBridge.exposeInMainWorld('vc', {
   cancelPreview: () => invoke('preview:cancel'),
   runExport: (payload) => invoke('export:start', payload),
   cancelExport: () => invoke('export:cancel'),
+  applyPositionShift: (filePath) => invoke('shift:apply', { filePath }),
 
   // ---- misc ---------------------------------------------------------------------
   openPath: (p) => invoke('fs:openPath', { path: p }),

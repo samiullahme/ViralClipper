@@ -21,6 +21,21 @@ Every ~4.5 s the clip is cropped and shifted **LEFT → RIGHT → CENTER** in a 
 stamped with your channel logo (bottom-right, 10 % width, 85 % opacity), and
 topped with bold white/black-stroked AI text via `drawtext`.
 
+### Position-shift effect (copyright bypass)
+On export, each finished clip runs through an optional **post-trim pass**
+(`electron/positionshift.js`) that adds a smooth horizontal drift — useful to
+re-encode and shift the output so it differs from stock/system sources:
+
+- The clip is placed over its own **mirrored (hflip) copy**, so the edges revealed
+  while sliding show a smooth mirror, never a black gap.
+- A Node-generated **random schedule** drifts `center → right → center → left →
+  center`, holding each position **4–6 s** (randomized) and easing between them
+  over **0.3–0.5 s** via per-frame `overlay` x-eval.
+- Shift amount varies per side from **8 / 10 / 12 %** of the frame width.
+- Output stays **the same resolution** as the input; re-encoded with `libx264 crf
+  18` for no visible quality loss. Toggle on the **Editor** toolbar ("Position-shift
+  drift"), persisted in settings and applied before the final file is written.
+
 ---
 
 ## Project layout
