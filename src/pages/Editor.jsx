@@ -12,6 +12,7 @@ const DEFAULT_OPTIONS = {
   segLen: 4.5,
   overlayFrame: true,
   logoOn: true,
+  phoneFrame: true,
   positionShift: true,
 };
 
@@ -142,6 +143,7 @@ export default function Editor() {
       <div className="card p-4 flex flex-wrap items-center gap-x-6 gap-y-3 mb-6">
         <span className="label !mb-0">Applied to all {enabledClips.length} enabled clips:</span>
         <Toggle k="jumpcut" label="Smooth pan + re-center (every 4.5s)" />
+        <Toggle k="phoneFrame" label="Phone frame (mockup)" />
         <Toggle k="positionShift" label="Position-shift drift (bypass)" />
         <Toggle k="overlayFrame" label="Phone-frame overlay" />
         <Toggle k="logoOn" label="Channel logo"

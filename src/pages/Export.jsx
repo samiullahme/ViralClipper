@@ -70,6 +70,7 @@ export default function Export() {
         options: {
           speed: 1.2, jumpcut: true, segLen: 4.5,
           overlayFrame: true, logoOn: !!settings.logoPath,
+          phoneFrame: true,
           positionShift: String(settings.position_shift == null ? true : settings.position_shift) !== 'false',
         },
         ratio,

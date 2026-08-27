@@ -102,6 +102,97 @@ function panXExpr(segLen, quality) {
 }
 
 /**
+ * Rounded-corner "rounded box" luma expression for geq.
+ * A point is inside the rounded rectangle if its distance to the inner box is
+ * <= R. Implemented via the signed-distance trick: px=clip(X,R,W-R),
+ * py=clip(Y,R,H-R); inside when (X-px)^2+(Y-py)^2 <= R^2.
+ */
+function roundedBoxLuma(W, H, R) {
+  const R2 = R * R;
+  return `if(lte(pow(X-clip(X,${R},${W - R}),2)+pow(Y-clip(Y,${R},${H - R}),2),${R2}),255,0)`;
+}
+
+// Cache of generated phone-frame PNGs keyed by "<W>x<H>".
+const pfCache = new Map();
+
+/**
+ * Build (and cache) a single rounded white phone-frame PNG for a WxH screen.
+ * The PNG is OWxOH with the WHITE ROUNDED BODY RING drawn as solid alpha and
+ * EVERYTHING ELSE transparent (screen area + outer area). Layering a video
+ * behind it + a light backdrop makes the classic "mockup" look.
+ *
+ * Rendering once per resolution (single frame, via spawnSync) is cheap; the
+ * per-frame cost in the video filtergraph is then just two overlays.
+ */
+function phoneFramePng(W, H, ffmpegPath, dir) {
+  const key = `${W}x${H}`;
+  if (pfCache.has(key)) return pfCache.get(key);
+  const short = Math.min(W, H);
+  const BEZEL = Math.max(2, Math.round(short * 0.018));
+  const MARGIN = Math.max(4, Math.round(short * 0.05));
+  const RC = Math.max(4, Math.round(short * 0.03));
+  const RCB = RC + BEZEL;
+  const SW = W + 2 * BEZEL, SH = H + 2 * BEZEL;
+  const OW = SW + 2 * MARGIN, OH = SH + 2 * MARGIN;
+  // Screen rect within the PNG (its top-left = MARGIN + BEZEL).
+  const SX = MARGIN + BEZEL, SY = MARGIN + BEZEL;
+
+  const out = `${dir}/pf_${W}x${H}.png`;
+  const fs = require('fs');
+  if (!fs.existsSync(out)) {
+    // Screen rect within the PNG (top-left = SX,SY). We compute ring membership
+    // using coordinates relative to the screen box for its inner-cut.
+    const bodyIn = `lte(pow(X-clip(X,${RCB},${SW - RCB}),2)+pow(Y-clip(Y,${RCB},${SH - RCB}),2),${RCB * RCB})`;
+    const scrX = `X-${SX}`;
+    const scrY = `Y-${SY}`;
+    const screenIn = `lte(pow(${scrX}-clip(${scrX},${RC},${W - RC}),2)+pow(${scrY}-clip(${scrY},${RC},${H - RC}),2),${RC * RC})`;
+    // alpha = 255 on the body ring (inside body AND NOT inside screen), else 0.
+    // (Uses arithmetic instead of and()/not() for ffmpeg-eval compatibility:
+    //  bodyIn and screenIn are 0/1, so bodyIn*(1-screenIn) is the AND-NOT.)
+    const ring = `if(${bodyIn}*(1-${screenIn}),255,0)`;
+    const geqExp = `a='${ring}':r=255:g=255:b=255`;
+    // One frame (d=1,r=1): assemble RGB+alpha then write a full-frame PNG.
+    const args = [
+      '-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', `color=c=black:s=${OW}x${OH}:d=1:r=1`,
+      '-vf', `format=rgba,geq=${geqExp},format=rgba`,
+      '-frames:v', '1', '-update', '1', out,
+    ];
+    const { spawnSync } = require('child_process');
+    const res = spawnSync(ffmpegPath || 'ffmpeg', args, { timeout: 20000 });
+    if (res.status !== 0 || !fs.existsSync(out)) {
+      if (res.status !== 0) console.error(res.stderr && res.stderr.toString());
+      throw new Error('Could not build phone-frame PNG.');
+    }
+  }
+  const meta = { png: out, W, H, SW, SH, OW, OH, SX, SY, BEZEL, MARGIN };
+  pfCache.set(key, meta);
+  return meta;
+}
+
+/**
+ * Build the phone-mockup frame chain around the already-rendered SCREEN.
+ * input label `inLabel` (a WxH, cover-filled video). Adds the phone-frame PNG
+ * as an extra input and returns { filters:[...ending in [pfout]], inputs:[...] }.
+ * Cheap at runtime (two overlays per frame), no per-frame geq.
+ */
+function phoneFrameChain(inLabel, W, H, opts) {
+  opts = opts || {};
+  const meta = phoneFramePng(W, H, opts.ffmpeg || 'ffmpeg', opts.tmpDir || os.tmpdir());
+  const BG = opts.frameBg || '0xEEEEEE';
+  const idx = opts.inputIndex; // index of the PNG in the -i list
+  return {
+    inputs: [meta.png],
+    filters: [
+      `color=c=${BG}:s=${meta.OW}x${meta.OH}:r=30[pf_bg]`,
+      `[pf_bg][${inLabel}]overlay=${meta.SX}:${meta.SY}:shortest=1[pf_s1]`,
+      `[${idx}:v]loop=loop=-1:size=1[pf_frame]`,
+      `[pf_s1][pf_frame]overlay=0:0:shortest=1,format=yuv420p[pfout]`,
+    ],
+  };
+}
+
+/**
  * Build the complete ffmpeg args array.
  *
  * opts = {
@@ -134,8 +225,14 @@ function buildArgs(opts) {
 
   // 3) Normalize fps + fit to target canvas.
   baseFilters.push('fps=30');
-  baseFilters.push(`scale=${W}:${H}:force_original_aspect_ratio=decrease`);
-  baseFilters.push(`pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black`);
+  if (opts.phoneFrame) {
+    // Phone frame = edge-to-edge fill (cover-crop), NO black bars.
+    baseFilters.push(`scale=${W}:${H}:force_original_aspect_ratio=increase`);
+    baseFilters.push(`crop=${W}:${H}`);
+  } else {
+    baseFilters.push(`scale=${W}:${H}:force_original_aspect_ratio=decrease`);
+    baseFilters.push(`pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black`);
+  }
   baseFilters.push('format=yuv420p');
 
   // Labeled base chain: [0:v]...[base]
@@ -193,6 +290,17 @@ function buildArgs(opts) {
     filters.push(`${label}null[vout]`);
   }
 
+  // 7) Phone-mockup frame (optional, outermost layer).
+  let mapLabel = '[vout]';
+  if (opts.phoneFrame) {
+    const pfIndex = inputIdx;
+    const pf = phoneFrameChain('vout', W, H, { ...opts, inputIndex: pfIndex });
+    inputs.push('-i', pf.inputs[0]);
+    filters.push(...pf.filters);
+    mapLabel = '[pfout]';
+    inputIdx++;
+  }
+
   // Audio tempo chain (atempo only accepts 0.5–2.0 per stage).
   const af = speed === 1 ? [] : ['-af', `atempo=${speed}`];
 
@@ -206,7 +314,7 @@ function buildArgs(opts) {
     '-i', opts.input,
     ...inputs,
     '-filter_complex', filters.join(';'),
-    '-map', '[vout]',
+    '-map', mapLabel,
     '-map', '0:a?',
     ...af,
     ...(isPreview

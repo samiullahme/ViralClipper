@@ -19,22 +19,37 @@ const PROVIDERS = {
 };
 
 /** Exact prompt required by the product spec (+ a nudge for strict JSON). */
-const DETECT_PROMPT = `You are a viral short-form video expert.
-Analyze this transcript and find 5-10 clips that would go viral on YouTube Shorts,
-TikTok, or Instagram Reels. Each clip should be 30-90 seconds.
-Return ONLY a JSON array like:
+// The supplied TRANSCRIPT is timestamped ([HH:MM:SS] text). The model must pick
+// real, content-driven viral sections of VARIABLE length — NOT uniform 30s
+// chunks — by reading what is actually being said, and must reuse the transcript
+// timestamps verbatim so start/end map to real words in the video.
+const DETECT_PROMPT = `You are a viral short-form video editor. I'll give you a timestamped
+TRANSCRIPT of a long video. Your job: find the 5-10 strongest moments that could each
+become a standalone YouTube Short / TikTok / Instagram Reel.
+
+RULES:
+- Read the CONTENT, not the clock. Choose moments where something interesting,
+  surprising, emotional, valuable, or contested actually happens.
+- Clip lengths must feel natural to the content's pacing and must be VARIABLE:
+  pick the best of 30s, 60s, 90s, or 120s per clip. Do NOT default to 30s and do
+  NOT make every clip the same length.
+- The clip must match the transcript EXACTLY: use the transcript's own [HH:MM:SS]
+  timestamps as start/end. start is where the moment begins, end is where it
+  naturally concludes. end must be greater than start.
+- 5-10 clips max. Prefer fewer, genuinely viral clips over padding.
+
+Return ONLY a JSON array (valid JSON, double quotes, no markdown, no other text):
 [
   {
-    "start": "00:01:23",
-    "end": "00:01:58",
-    "title": "clip title",
-    "reason": "why this will go viral",
-    "hook": "suggested hook text for overlay"
+    "start": "HH:MM:SS",
+    "end": "HH:MM:SS",
+    "title": "short catchy title (max 8 words)",
+    "reason": "1 sentence: exactly why this moment goes viral",
+    "hook": "scroll-stopping first-line hook for the overlay"
   }
 ]
-Use double quotes so the output is valid JSON. Times must be HH:MM:SS inside the video.
 
-TRANSCRIPT:
+TRANSCRIPT (timestamped lines):
 `;
 
 const COPY_SYSTEM =

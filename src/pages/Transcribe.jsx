@@ -15,12 +15,23 @@ export default function Transcribe() {
   const [detecting, setDetecting] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
   const listRef = useRef(null);
+  // Nonce = which video this page is currently operating on, so a
+  // transcribe:result from a previous/other project can never leak into view.
+  const [videoPath, setVideoPath] = useState(null);
+
+  // Reset transcription state whenever the loaded video changes.
+  useEffect(() => {
+    setVideoPath(video?.path || null);
+    setRunning(false);
+    setProgress(0);
+    setStatusLine('');
+  }, [video?.path]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-start when arriving with an untranscribed video.
   useEffect(() => {
-    if (video && transcript.length === 0 && !running && progress === 0) start();
+    if (video && videoPath === video.path && transcript.length === 0 && !running && progress === 0) start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [video, videoPath, transcript.length]);
 
   // Subscribe to the python process event stream.
   useEffect(() => {
@@ -30,6 +41,9 @@ export default function Transcribe() {
         if (m.line) setStatusLine(m.line);
       }),
       window.vc.on('transcribe:result', async (segments) => {
+        // Ignore results that arrive after the user switched projects/videos,
+        // otherwise an old project's segments could overwrite the current one.
+        if (!projectId) return;
         setRunning(false);
         setProgress(100);
         setTranscript(segments);
