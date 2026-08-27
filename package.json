@@ -1,7 +1,7 @@
 {
   "name": "viralclipper",
   "productName": "ViralClipper",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Turn long videos into viral short clips (YouTube Shorts / TikTok / Reels)",
   "main": "electron/main.js",
   "license": "MIT",
