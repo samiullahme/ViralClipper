@@ -3,7 +3,7 @@
 // Sections: dialogs · video info/thumbs · projects · settings (encrypted API key)
 //           transcription bridge · AI clip detection/copywriting
 //           editor previews · export queue · binaries · misc.
-const { ipcMain, dialog, shell, safeStorage } = require('electron');
+const { ipcMain, dialog, shell, safeStorage, app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -509,6 +509,8 @@ function registerIpcHandlers(paths, windowGetter) {
   });
 
   // ---- binaries & misc ----------------------------------------------------------------------
+  ipcMain.handle('app:version', () => app.getVersion());
+
   ipcMain.handle('binaries:check', () => binaries.status(P.root));
   ipcMain.handle('binaries:install', async () => {
     send('binaries:status', binaries.status(P.root));

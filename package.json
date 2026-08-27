@@ -16,7 +16,10 @@
     "build:renderer": "vite build",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "dist": "npm run build:renderer && electron-builder --win --dir",
-    "dist:portable": "npm run build:renderer && electron-builder --win --dir && node scripts/zip-portable.mjs"
+    "dist:portable": "npm run build:renderer && electron-builder --win --dir && node scripts/zip-portable.mjs",
+    "bump": "npm version patch -m \"v%s\"",
+    "bump:minor": "npm version minor -m \"v%s\"",
+    "bump:major": "npm version major -m \"v%s\""
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",

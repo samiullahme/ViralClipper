@@ -25,6 +25,11 @@ function Icon({ d }) {
 export default function Sidebar() {
   const { video, transcript, clips, settings } = useApp();
   const [binStatus, setBinStatus] = useState(null);
+  const [version, setVersion] = useState('1.0.0');
+
+  useEffect(() => {
+    window.vc?.getVersion?.().then((v) => v && setVersion(v)).catch(() => {});
+  }, []);
 
   // Track ffmpeg/python availability for the footer indicator.
   useEffect(() => {
@@ -96,7 +101,7 @@ export default function Sidebar() {
               : 'Components missing — open Settings'}
         </div>
         <div>AI: <span className="text-zinc-300 capitalize">{settings.provider}</span></div>
-        <div className="text-zinc-600">v1.0 · dark mode</div>
+        <div className="text-zinc-600">v{version} · dark mode</div>
       </div>
     </aside>
   );

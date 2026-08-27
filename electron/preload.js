@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('vc', {
   // ---- settings --------------------------------------------------------------
   getSettings: () => invoke('settings:get'),
   setSettings: (pairs) => invoke('settings:set', pairs),
+  getVersion: () => invoke('app:version'),
 
   // ---- transcription (embedded python bridge) ---------------------------------
   startTranscription: (videoPath, durationSec) =>
